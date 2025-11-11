@@ -1,0 +1,94 @@
+version: "3.9"
+
+services:
+  n8n:
+    container_name: n8n
+    image: docker.n8n.io/n8nio/n8n
+    environment:
+      - WEBHOOK_URL=${URL}
+      - TZ=${TIMEZONE}
+      - GENERIC_TIMEZONE=${TIMEZONE}
+    networks:
+      - n8n-network
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  ngrok:
+    container_name: ngrok
+    image: ngrok/ngrok:latest
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_TOKEN}
+    command:
+      - "start"
+      - "--all"
+      - "--config"
+      - "/etc/ngrok.yml"
+    networks:
+      - n8n-network
+    volumes:
+      - ./ngrok.yml:/etc/ngrok.yml
+
+  redis:
+    container_name: redis
+    image: redis:latest
+    restart: always
+    networks:
+      - n8n-network
+    command: /bin/sh -c "redis-server --requirepass $$REDIS_HOST_PASSWORD"
+    volumes:
+      - redis_data:/data
+    env_file:
+      - .env
+
+  db:
+    container_name: postgres
+    image: postgres:17
+    restart: always
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=pass
+      - POSTGRES_DB=evolution
+    networks:
+      - n8n-network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin4
+    hostname: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "demo@demo.com"
+      PGADMIN_DEFAULT_PASSWORD: "2020PASS"
+    depends_on:
+      - db
+    networks:
+      - n8n-network
+    ports:
+      - "5050:5050"
+
+  evolution-api:
+    container_name: evolution_api
+    image: atendai/evolution-api:v2.1.1
+    restart: always
+    ports:
+      - "3002:3002" # Change the external port to 3002
+    env_file:
+      - .env
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - n8n-network
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  n8n_data:
+  redis_data:
+  postgres_data:
+  evolution_instances:
+
+networks:
+  n8n-network:
+    driver: bridge
